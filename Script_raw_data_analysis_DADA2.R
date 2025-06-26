@@ -392,7 +392,7 @@ names(derepRs.2) <- sample.names.2[exists.2]
 names(derepFs.3) <- sample.names.3[exists.3]
 names(derepRs.3) <- sample.names.3[exists.3]
 
-# Sample inference:
+# ASV inference (denoising step):
 dadaFs.1 <- dada(derepFs.1, err = errF.1, multithread = TRUE)
 saveRDS(dadaFs.1, "/dada_F_lib1.rds")
 

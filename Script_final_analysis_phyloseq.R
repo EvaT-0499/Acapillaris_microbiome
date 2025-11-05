@@ -589,7 +589,7 @@ tab$Kingdom <- factor(tab$Kingdom, levels = c("Fungi", "Bacteria"))
 
 write_csv(tab, "")
 
-tab <- read.csv("/media/tanneau/601C-60FB/Doctorat/Publications/1st publication/Supp. data/ANCOM-BC/Final_sheets/2020_mowing_ANCOMBC_logFC_padj.csv")
+tab <- read.csv("/2020_mowing_ANCOMBC_logFC_padj.csv")
 
 my_colors <- c("#FF6666","#0066CC")
 my_colors <- c("#0066CC")
@@ -762,7 +762,7 @@ plot(props_genus,
      cexLabels = 0, # 0 = no ; 1=name of every node
      # cexLabels as 1 = all node names
      cexHubLabels = NULL, # name of the hubs - NULL or size 0.9
-     title1 = "Network on genus level with SpiecEasi - Undisturbed vegetation - Leaf", 
+     title1 = "Network on genus level with SpiecEasi - Passive succession - Leaf", 
      showTitle = TRUE,
      cexTitle = 1.2,
      highlightHubs = TRUE,

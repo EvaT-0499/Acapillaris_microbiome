@@ -98,7 +98,7 @@ plot_diversity_stats(ps.ITS, group = "Block",
 ################################################################
 
 # Plant compartment comparison
-# Figure 1
+# Figure 2
 
 # Bacteria - Alpha diversity
 plot_diversity_stats(ps.rar.16S, group = "Material", 
@@ -221,13 +221,177 @@ ggplot(df, aes(Material, Abundance, fill = Family)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
   labs(x = "Material", y = "Average relative abundance") + My_Theme + guides(fill = guide_legend(ncol = 1))
 
+########################################################################
+
+
+# Year comparison
+# Figure 3
+
+# Load data from each years
+ps.16S.2020 <- readRDS("/ps_16S_2020_rarefied.rds")
+ps.16S.2021 <- readRDS("/ps_16S_2021_rarefied.rds")
+ps.16S.2022 <- readRDS("/ps_16S_2022_rarefied.rds")
+
+ps.ITS.2020 <- readRDS("/ps_ITS_2020_rarefied.rds")
+ps.ITS.2021 <- readRDS("/ps_ITS_2021_rarefied.rds")
+ps.ITS.2022 <- readRDS("/ps_ITS_2022_rarefied.rds")
+# Add the year in the metadata
+# bacteria
+sample_data(ps.16S.2020)$Year <- "2020"
+sample_data(ps.16S.2021)$Year <- "2021"
+sample_data(ps.16S.2022)$Year <- "2022"
+
+# fungi
+sample_data(ps.ITS.2020)$Year <- "2020"
+sample_data(ps.ITS.2021)$Year <- "2021"
+sample_data(ps.ITS.2022)$Year <- "2022"
+
+# Merge data from each year
+ps.16S.all <- merge_phyloseq(ps.16S.2021, ps.16S.2020, ps.16S.2022)
+ps.ITS.all <- merge_phyloseq(ps.ITS.2021, ps.ITS.2020, ps.ITS.2022)
+
+# Keep only the leaf samples
+ps.16S.leaf <- subset_samples(ps.16S.all, Material == "Leaf")
+ps.ITS.leaf <- subset_samples(ps.ITS.all, Material == "Leaf")
+
+# Subset by management practices
+ps.16S.mow <- subset_samples(ps.16S.leaf, Treatment == "Mowing")
+ps.16S.graz <- subset_samples(ps.16S.leaf, Treatment == "Perm_access")
+ps.16S.excl <- subset_samples(ps.16S.leaf, Treatment == "Perm_exclosure")
+
+ps.ITS.mow <- subset_samples(ps.ITS.leaf, Treatment == "Mowing")
+ps.ITS.graz <- subset_samples(ps.ITS.leaf, Treatment == "Perm_access")
+ps.ITS.excl <- subset_samples(ps.ITS.leaf, Treatment == "Perm_exclosure")
+
+
+#Alpha diversity
+# Bacteria
+plot_diversity_stats(ps.16S.root, group = "Year", 
+                     index = "diversity_shannon", 
+                     group.order = c("2020","2021","2022"),
+                     label.format="p.format",
+                     stats = TRUE) + ylab("Shannon Diversity") + xlab("")+ scale_fill_brewer( palette = "Pastel1")+ scale_color_brewer( palette = "Pastel1")+ My_Theme
+
+
+# Fungi
+plot_diversity_stats(ps.ITS.root, group = "Year", 
+                     index = "diversity_shannon", 
+                     group.order = c("2020","2021","2022"),
+                     label.format="p.format",
+                     stats = TRUE) + ylab("Shannon Diversity") + xlab("")+ scale_fill_brewer( palette = "Pastel1")+ scale_color_brewer( palette = "Pastel1")+ My_Theme
+
+
+
+#Beta diversity
+ps.prop.16S <- transform_sample_counts(ps.16S.root, function(otu) otu/sum(otu))
+ps.prop.ITS <- transform_sample_counts(ps.ITS.root, function(otu) otu/sum(otu))
+
+# Run PermANOVA
+# bacteria
+bray.dist <- phyloseq::distance(ps.prop.16S, method = "bray")
+metadata <- as(sample_data(ps.prop.16S), "data.frame")
+adonis2(bray.dist ~ Year,
+        data = metadata)
+
+# fungi
+bray.dist <- phyloseq::distance(ps.prop.ITS, method = "bray")
+metadata <- as(sample_data(ps.prop.ITS), "data.frame")
+adonis2(bray.dist ~ Year,
+        data = metadata)
+
+
+# Beta diversity graphs
+# bacteria
+physeq.ord <- ordinate(ps.16S.root, "PCoA", "bray")
+b.div.bray <- plot_ordination(ps.16S.root, physeq.ord, type= "samples", color= "Year") + geom_point(size=4)
+b.div.bray <- b.div.bray + stat_ellipse()  + scale_color_brewer("Year", palette = "Pastel1") + My_Theme + theme_classic(base_size = 20)
+print(b.div.bray)
+
+#fungi
+physeq.ord <- ordinate(ps.ITS.root, "PCoA", "bray")
+b.div.bray <- plot_ordination(ps.ITS.root, physeq.ord, type= "samples", color= "Year") + geom_point(size=4)
+b.div.bray <- b.div.bray + stat_ellipse()  + scale_color_brewer("Year", palette = "Pastel1") + My_Theme + theme_classic(base_size = 20)
+print(b.div.bray)
+
+
+
+
+# Relative abundance
+# Fungi
+merged_ps = merge_samples(ps.ITS.root, "Year")
+normalized_ps_phylum = tax_glom(merged_ps, "Family", NArm = TRUE)
+
+normalized_ps_phylum_relabun = transform_sample_counts(normalized_ps_phylum, function(OTU) OTU/sum(OTU))
+taxaSums = data.frame(tax_table(normalized_ps_phylum_relabun)[,"Family"],
+                      taxa_sums = taxa_sums(normalized_ps_phylum_relabun)) %>%
+  arrange(desc(taxa_sums)) # reverse sort
+
+N <- 20
+top20 <- names(sort(taxa_sums(normalized_ps_phylum), decreasing = TRUE))[1:N]
+GP.genus.prop <- transform_sample_counts(normalized_ps_phylum, function(x) x / sum(x) )
+GP.genus.prop.top <- prune_taxa(top20, GP.genus.prop)
+y = GP.genus.prop.top
+
+
+df1 = data.frame(ID = c(taxa_names(y), "Other"), Family = c(tax_table(y)[,"Family"], "Other"))
+df2 = t(cbind(otu_table(y), data.frame(Other = 1 - sample_sums(y))))
+
+df = cbind(df1, df2) %>%
+  pivot_longer(-c(ID, Family), names_to = "Year", values_to = "Abundance") %>%
+  as.data.frame
+df$Family = as.factor(df$Family)
+
+colourCount = 21
+getPalette = colorRampPalette(brewer.pal(8,"Pastel1"))
+
+ggplot(df, aes(Year, Abundance, fill = Family)) +
+  geom_col(color = "black") + scale_fill_manual(values = getPalette(colourCount)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  labs(x = "Year", y = "Average relative abundance") + My_Theme + guides(fill = guide_legend(ncol = 1))
+
+
+
+# Bacteria
+merged_ps = merge_samples(ps.16S.root, "Year")
+normalized_ps_phylum = tax_glom(merged_ps, "Family", NArm = TRUE)
+
+normalized_ps_phylum_relabun = transform_sample_counts(normalized_ps_phylum, function(OTU) OTU/sum(OTU))
+taxaSums = data.frame(tax_table(normalized_ps_phylum_relabun)[,"Family"],
+                      taxa_sums = taxa_sums(normalized_ps_phylum_relabun)) %>%
+  arrange(desc(taxa_sums)) # reverse sort
+
+N <- 20
+top20 <- names(sort(taxa_sums(normalized_ps_phylum), decreasing = TRUE))[1:N]
+GP.genus.prop <- transform_sample_counts(normalized_ps_phylum, function(x) x / sum(x) )
+GP.genus.prop.top <- prune_taxa(top20, GP.genus.prop)
+y = GP.genus.prop.top
+
+
+df1 = data.frame(ID = c(taxa_names(y), "Other"), Family = c(tax_table(y)[,"Family"], "Other"))
+df2 = t(cbind(otu_table(y), data.frame(Other = 1 - sample_sums(y))))
+
+df = cbind(df1, df2) %>%
+  pivot_longer(-c(ID, Family), names_to = "Year", values_to = "Abundance") %>%
+  as.data.frame
+df$Family = as.factor(df$Family)
+
+colourCount = 21
+getPalette = colorRampPalette(brewer.pal(8,"Pastel1"))
+
+ggplot(df, aes(Year, Abundance, fill = Family)) +
+  geom_col(color = "black") + scale_fill_manual(values = getPalette(colourCount)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  labs(x = "Year", y = "Average relative abundance") + My_Theme + guides(fill = guide_legend(ncol = 1))
+
 
 ################################################################
 
 
 # Focus on leaves
 # Managment practices differences
-# Figure 2
+# Figure 4
 
 # Bacteria - Alpha diversity
 plot_diversity_stats(ps.rar.16S.root, group = "Treatment", 
@@ -442,7 +606,7 @@ plt
 
 
 # Network building
-# Figure 3
+# Figure 5
 
 # Merge ITS and 16S data (or open the ps. object with both fungi and bacteria data)
 ps <- readRDS("/ps_2022_16S_ITS.rds")
@@ -500,7 +664,7 @@ taxtab <- as(tax_table(amgut_genus_renamed), "matrix")
 phyla <- as.factor(gsub("k__", "", taxtab[, "Kingdom"]))
 names(phyla) <- taxtab[, "Genus"]
 
-
+# Generate the plot
 plot(props_genus,
      edgeInvisFilter = "threshold",
      edgeInvisPar = 0.07, #edge filtering
@@ -530,7 +694,7 @@ plot(props_genus,
      hubLabelFont = NULL,
      hubBorderCol = "black")
 
-
+# Add legend
 phylcol_transp <- colToTransp(phylcol, 40)
 
 legend(-1, 1, cex = 0.85, pt.cex = 3, title = "Kingdom", 
@@ -575,6 +739,7 @@ taxtab <- as(tax_table(amgut_genus_renamed), "matrix")
 phyla <- as.factor(gsub("k__", "", taxtab[, "Kingdom"]))
 names(phyla) <- taxtab[, "Genus"]
 
+# Generate the plot
 plot(props_genus,
      edgeInvisFilter = "threshold",
      edgeInvisPar = 0.07, #edge filtering
@@ -605,7 +770,7 @@ plot(props_genus,
      hubBorderCol = "black")
 
 
-
+# Add legend
 phylcol_transp <- colToTransp(phylcol, 40)
 
 legend(-1, 1, cex = 0.85, pt.cex = 3, title = "Kingdom", 
@@ -648,6 +813,7 @@ taxtab <- as(tax_table(amgut_genus_renamed), "matrix")
 phyla <- as.factor(gsub("k__", "", taxtab[, "Kingdom"]))
 names(phyla) <- taxtab[, "Genus"]
 
+# Generate the plot
 plot(props_genus,
      edgeInvisFilter = "threshold",
      edgeInvisPar = 0.07, #edge filtering
@@ -678,7 +844,7 @@ plot(props_genus,
      hubBorderCol = "black")
 
 
-
+# Add legend
 phylcol_transp <- colToTransp(phylcol, 40)
 
 legend(-1, 1, cex = 0.85, pt.cex = 3, title = "Kingdom", 
@@ -687,169 +853,4 @@ legend(-1, 1, cex = 0.85, pt.cex = 3, title = "Kingdom",
 legend(0.60, 1, cex = 0.9, title = "estimated correlation:",
        legend = c("+","-"), lty = 1.9, lwd = 2, col = c("#66CC99","#CC3366"), 
        bty = "n", horiz = TRUE)
-
-
-########################################################################
-
-
-# Year comparison
-# Figure 4
-
-# Load data from each years
-ps.16S.2020 <- readRDS("/ps_16S_2020_rarefied.rds")
-ps.16S.2021 <- readRDS("/ps_16S_2021_rarefied.rds")
-ps.16S.2022 <- readRDS("/ps_16S_2022_rarefied.rds")
-
-ps.ITS.2020 <- readRDS("/ps_ITS_2020_rarefied.rds")
-ps.ITS.2021 <- readRDS("/ps_ITS_2021_rarefied.rds")
-ps.ITS.2022 <- readRDS("/ps_ITS_2022_rarefied.rds")
-# Add the year in the metadata
-# bacteria
-sample_data(ps.16S.2020)$Year <- "2020"
-sample_data(ps.16S.2021)$Year <- "2021"
-sample_data(ps.16S.2022)$Year <- "2022"
-
-# fungi
-sample_data(ps.ITS.2020)$Year <- "2020"
-sample_data(ps.ITS.2021)$Year <- "2021"
-sample_data(ps.ITS.2022)$Year <- "2022"
-
-# Merge data from each year
-ps.16S.all <- merge_phyloseq(ps.16S.2021, ps.16S.2020, ps.16S.2022)
-ps.ITS.all <- merge_phyloseq(ps.ITS.2021, ps.ITS.2020, ps.ITS.2022)
-
-# Keep only the leaf samples
-ps.16S.leaf <- subset_samples(ps.16S.all, Material == "Leaf")
-ps.ITS.leaf <- subset_samples(ps.ITS.all, Material == "Leaf")
-
-# Subset by management practices
-ps.16S.mow <- subset_samples(ps.16S.leaf, Treatment == "Mowing")
-ps.16S.graz <- subset_samples(ps.16S.leaf, Treatment == "Perm_access")
-ps.16S.excl <- subset_samples(ps.16S.leaf, Treatment == "Perm_exclosure")
-
-ps.ITS.mow <- subset_samples(ps.ITS.leaf, Treatment == "Mowing")
-ps.ITS.graz <- subset_samples(ps.ITS.leaf, Treatment == "Perm_access")
-ps.ITS.excl <- subset_samples(ps.ITS.leaf, Treatment == "Perm_exclosure")
-
-
-#Alpha diversity
-# Bacteria
-plot_diversity_stats(ps.16S.root, group = "Year", 
-                     index = "diversity_shannon", 
-                     group.order = c("2020","2021","2022"),
-                     label.format="p.format",
-                     stats = TRUE) + ylab("Shannon Diversity") + xlab("")+ scale_fill_brewer( palette = "Pastel1")+ scale_color_brewer( palette = "Pastel1")+ My_Theme
-
-
-# Fungi
-plot_diversity_stats(ps.ITS.root, group = "Year", 
-                     index = "diversity_shannon", 
-                     group.order = c("2020","2021","2022"),
-                     label.format="p.format",
-                     stats = TRUE) + ylab("Shannon Diversity") + xlab("")+ scale_fill_brewer( palette = "Pastel1")+ scale_color_brewer( palette = "Pastel1")+ My_Theme
-
-
-
-#Beta diversity
-ps.prop.16S <- transform_sample_counts(ps.16S.root, function(otu) otu/sum(otu))
-ps.prop.ITS <- transform_sample_counts(ps.ITS.root, function(otu) otu/sum(otu))
-
-# Run PermANOVA
-# bacteria
-bray.dist <- phyloseq::distance(ps.prop.16S, method = "bray")
-metadata <- as(sample_data(ps.prop.16S), "data.frame")
-adonis2(bray.dist ~ Year,
-        data = metadata)
-
-# fungi
-bray.dist <- phyloseq::distance(ps.prop.ITS, method = "bray")
-metadata <- as(sample_data(ps.prop.ITS), "data.frame")
-adonis2(bray.dist ~ Year,
-        data = metadata)
-
-
-# Beta diversity graphs
-# bacteria
-physeq.ord <- ordinate(ps.16S.root, "PCoA", "bray")
-b.div.bray <- plot_ordination(ps.16S.root, physeq.ord, type= "samples", color= "Year") + geom_point(size=4)
-b.div.bray <- b.div.bray + stat_ellipse()  + scale_color_brewer("Year", palette = "Pastel1") + My_Theme + theme_classic(base_size = 20)
-print(b.div.bray)
-
-#fungi
-physeq.ord <- ordinate(ps.ITS.root, "PCoA", "bray")
-b.div.bray <- plot_ordination(ps.ITS.root, physeq.ord, type= "samples", color= "Year") + geom_point(size=4)
-b.div.bray <- b.div.bray + stat_ellipse()  + scale_color_brewer("Year", palette = "Pastel1") + My_Theme + theme_classic(base_size = 20)
-print(b.div.bray)
-
-
-
-
-# Relative abundance
-# Fungi
-merged_ps = merge_samples(ps.ITS.root, "Year")
-normalized_ps_phylum = tax_glom(merged_ps, "Family", NArm = TRUE)
-
-normalized_ps_phylum_relabun = transform_sample_counts(normalized_ps_phylum, function(OTU) OTU/sum(OTU))
-taxaSums = data.frame(tax_table(normalized_ps_phylum_relabun)[,"Family"],
-                      taxa_sums = taxa_sums(normalized_ps_phylum_relabun)) %>%
-  arrange(desc(taxa_sums)) # reverse sort
-
-N <- 20
-top20 <- names(sort(taxa_sums(normalized_ps_phylum), decreasing = TRUE))[1:N]
-GP.genus.prop <- transform_sample_counts(normalized_ps_phylum, function(x) x / sum(x) )
-GP.genus.prop.top <- prune_taxa(top20, GP.genus.prop)
-y = GP.genus.prop.top
-
-
-df1 = data.frame(ID = c(taxa_names(y), "Other"), Family = c(tax_table(y)[,"Family"], "Other"))
-df2 = t(cbind(otu_table(y), data.frame(Other = 1 - sample_sums(y))))
-
-df = cbind(df1, df2) %>%
-  pivot_longer(-c(ID, Family), names_to = "Year", values_to = "Abundance") %>%
-  as.data.frame
-df$Family = as.factor(df$Family)
-
-colourCount = 21
-getPalette = colorRampPalette(brewer.pal(8,"Pastel1"))
-
-ggplot(df, aes(Year, Abundance, fill = Family)) +
-  geom_col(color = "black") + scale_fill_manual(values = getPalette(colourCount)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  labs(x = "Year", y = "Average relative abundance") + My_Theme + guides(fill = guide_legend(ncol = 1))
-
-
-
-# Bacteria
-merged_ps = merge_samples(ps.16S.root, "Year")
-normalized_ps_phylum = tax_glom(merged_ps, "Family", NArm = TRUE)
-
-normalized_ps_phylum_relabun = transform_sample_counts(normalized_ps_phylum, function(OTU) OTU/sum(OTU))
-taxaSums = data.frame(tax_table(normalized_ps_phylum_relabun)[,"Family"],
-                      taxa_sums = taxa_sums(normalized_ps_phylum_relabun)) %>%
-  arrange(desc(taxa_sums)) # reverse sort
-
-N <- 20
-top20 <- names(sort(taxa_sums(normalized_ps_phylum), decreasing = TRUE))[1:N]
-GP.genus.prop <- transform_sample_counts(normalized_ps_phylum, function(x) x / sum(x) )
-GP.genus.prop.top <- prune_taxa(top20, GP.genus.prop)
-y = GP.genus.prop.top
-
-
-df1 = data.frame(ID = c(taxa_names(y), "Other"), Family = c(tax_table(y)[,"Family"], "Other"))
-df2 = t(cbind(otu_table(y), data.frame(Other = 1 - sample_sums(y))))
-
-df = cbind(df1, df2) %>%
-  pivot_longer(-c(ID, Family), names_to = "Year", values_to = "Abundance") %>%
-  as.data.frame
-df$Family = as.factor(df$Family)
-
-colourCount = 21
-getPalette = colorRampPalette(brewer.pal(8,"Pastel1"))
-
-ggplot(df, aes(Year, Abundance, fill = Family)) +
-  geom_col(color = "black") + scale_fill_manual(values = getPalette(colourCount)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-  labs(x = "Year", y = "Average relative abundance") + My_Theme + guides(fill = guide_legend(ncol = 1))
 

@@ -458,7 +458,7 @@ saveRDS(seqtab.3, "/seqtab.3.rds")
 
 # Merge libraries
 st.all <- mergeSequenceTables(seqtab.1, seqtab.2, seqtab.3)
-saveRDS(st.all, "/home/tanneau/Documents/Mols project/Amplicon sequencing analysis/2022/ITS/seqtab.all.rds")
+saveRDS(st.all, "/seqtab.all.rds")
 
 # Remove chimeras
 seqtab.nochim <- removeBimeraDenovo(st.all, method="consensus", multithread=TRUE, verbose=TRUE)
@@ -623,7 +623,7 @@ taxa_names(ps) <- names.ps$asv
 
 # Save sequences as csv file
 tab <- data.frame(refseq(ps))
-write.csv(tab, file="ITS_sequences_2022.csv", sep = ",", quote=F)
+write.csv(tab, file="/ITS_sequences_2022.csv", sep = ",", quote=F)
 
 # Inspect refseq slot
 ps
